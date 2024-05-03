@@ -33,7 +33,7 @@ The usual requirements that Twitch has for EventSub webhooks do still apply!
 
 ## Setup
 
-Step 1: Create a new ASP.NET Core project (.NET 5.0 and up)
+Step 1: Create a new ASP.NET Core project (.NET 6.0 and up)
 
 Step 2: Install the TwitchLib.EventSub.Webhooks nuget package. (See above on how to do that)
 
@@ -54,7 +54,8 @@ public void ConfigureServices(IServiceCollection services)
 }
 ```
 
-!!! If you follow these steps your callback url will https://{your_domain}/webhooks !!!
+!!! If you follow these steps your callback url will `https://{your_domain}/webhooks`!!!
+(The location of where to put this and the naming of variables might differ depending on what kind of project and general setup you have)
 
 Step 4: Put the TwitchLib.EventSub.Webhooks middleware in the request pipeline
 
@@ -78,6 +79,7 @@ public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
     });
 }
 ```
+(The location of where to put this and the naming of variables might differ depending on what kind of project and general setup you have)
 
 Step 5: Create the HostedService and listen for events
 

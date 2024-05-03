@@ -1,20 +1,33 @@
-using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using TwitchLib.EventSub.Webhooks.Example;
+using TwitchLib.EventSub.Webhooks.Extensions;
 
-namespace TwitchLib.EventSub.Webhooks.Example
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddControllers();
+builder.Services.AddTwitchLibEventSubWebhooks(config =>
 {
-    public class Program
-    {
-        public static void Main(string[] args)
-        {
-            CreateHostBuilder(args).Build().Run();
-        }
+    config.CallbackPath = "/webhooks";
+    config.Secret = "supersecuresecret";
+});
+builder.Services.AddHostedService<EventSubHostedService>();
 
-        public static IHostBuilder CreateHostBuilder(string[] args) =>
-            Host.CreateDefaultBuilder(args)
-                .ConfigureWebHostDefaults(webBuilder =>
-                {
-                    webBuilder.UseStartup<Startup>();
-                });
-    }
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
 }
+
+app.UseRouting();
+app.UseAuthorization();
+
+app.UseTwitchLibEventSubWebhooks();
+
+app.MapControllers();
+
+app.Run();
