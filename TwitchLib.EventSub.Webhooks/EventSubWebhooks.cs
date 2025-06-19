@@ -143,22 +143,23 @@ namespace TwitchLib.EventSub.Webhooks
         public event EventHandler<UserWhisperMessageArgs>? OnUserWhisperMessage;
 
         /// <inheritdoc/>
-        public async Task ProcessNotificationAsync(Dictionary<string, string> headers, Stream body)
+        public async Task ProcessNotificationAsync(WebhookEventSubMetadata headers, ReadOnlyMemory<byte> body2)
         {
+            var body = new MemoryStream(body2.ToArray()); // temporary hack for smaller “code diff”
             try
             {
-                if (!headers.TryGetValue("Twitch-Eventsub-Subscription-Type", out var subscriptionType))
+                if (headers.SubscriptionType is null)
                 {
                     OnError?.Invoke(this, new OnErrorArgs { Reason = "Missing_Header", Message = "The Twitch-Eventsub-Subscription-Type header was not found" });
                     return;
                 }
-                if (!headers.TryGetValue("Twitch-Eventsub-Subscription-Version", out var subscriptionVersion))
+                if (headers.SubscriptionVersion is null)
                 {
                     OnError?.Invoke(this, new OnErrorArgs { Reason = "Missing_Header", Message = "The Twitch-Eventsub-Subscription-Version header was not found" });
                     return;
                 }
 
-                switch ((subscriptionType, subscriptionVersion))
+                switch ((headers.SubscriptionType, headers.SubscriptionVersion))
                 {
                     case ("channel.ban", "1"):
                         var banNotification = await JsonSerializer.DeserializeAsync<EventSubNotificationPayload<ChannelBan>>(body, _jsonSerializerOptions);
@@ -365,7 +366,7 @@ namespace TwitchLib.EventSub.Webhooks
                         OnUserWhisperMessage?.Invoke(this, new UserWhisperMessageArgs { Headers = headers, Notification = userWhisperMessage! });
                         break;
                     default:
-                        OnError?.Invoke(this, new OnErrorArgs { Reason = "Unknown_Subscription_Type", Message = $"Cannot parse unknown subscription type {subscriptionType}" });
+                        OnError?.Invoke(this, new OnErrorArgs { Reason = "Unknown_Subscription_Type", Message = $"Cannot parse unknown subscription type {headers.SubscriptionType}" });
                         break;
                 }
             }
@@ -376,11 +377,11 @@ namespace TwitchLib.EventSub.Webhooks
         }
 
         /// <inheritdoc/>
-        public async Task ProcessRevocationAsync(Dictionary<string, string> headers, Stream body)
+        public async Task ProcessRevocationAsync(WebhookEventSubMetadata headers, ReadOnlyMemory<byte> body)
         {
             try
             {
-                var notification = await JsonSerializer.DeserializeAsync<EventSubNotificationPayload<object>>(body, _jsonSerializerOptions);
+                var notification = JsonSerializer.Deserialize<EventSubNotificationPayload<object>>(body.Span, _jsonSerializerOptions);
                 OnRevocation?.Invoke(this, new RevocationArgs { Headers = headers, Notification = notification! });
             }
             catch (Exception ex)

@@ -33,7 +33,6 @@ namespace TwitchLib.EventSub.Webhooks.Extensions
                                    && context.Request.Path.Equals(options.Value.CallbackPath, StringComparison.InvariantCultureIgnoreCase), appBuilder =>
             {
                 appBuilder.UseMiddleware<EventSubSignatureVerificationMiddleware>();
-                appBuilder.UseMiddleware<EventSubNotificationMiddleware>();
             });
 
             return app;

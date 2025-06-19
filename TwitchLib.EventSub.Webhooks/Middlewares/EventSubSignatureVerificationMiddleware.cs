@@ -8,61 +8,70 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using TwitchLib.EventSub.Webhooks.Core;
 using TwitchLib.EventSub.Webhooks.Core.Models;
 using TwitchLib.EventSub.Webhooks.Extensions;
 
 #pragma warning disable 1591
 namespace TwitchLib.EventSub.Webhooks.Middlewares
 {
+    // TODO rename to   EventSubMiddleware (or something else?)
 
     public class EventSubSignatureVerificationMiddleware
     {
-        private readonly RequestDelegate _next;
         private readonly ILogger<EventSubSignatureVerificationMiddleware> _logger;
         private readonly TwitchLibEventSubOptions _options;
+        private readonly IEventSubWebhooks _eventSubWebhooks;
 
-        public EventSubSignatureVerificationMiddleware(RequestDelegate next, ILogger<EventSubSignatureVerificationMiddleware> logger, IOptions<TwitchLibEventSubOptions> options)
+        public EventSubSignatureVerificationMiddleware(RequestDelegate next, ILogger<EventSubSignatureVerificationMiddleware> logger, IOptions<TwitchLibEventSubOptions> options, IEventSubWebhooks eventSubWebhooks)
         {
-            _next = next;
+            _ = next; // we don't need it but it's required for middleware
+                     // (if we got this far it has to be some ES event otherwise we have to return an error)
             _logger = logger;
+            _eventSubWebhooks = eventSubWebhooks;
             _options = options.Value;
         }
 
         public async Task InvokeAsync(HttpContext context)
         {
-            if (await IsValidEventSubRequest(context.Request))
+            var metadata = WebhookEventSubMetadata.CreateMetadata(context.Request.Headers);
+            var body = await ReadRequestBodyContentAsync(context.Request);
+
+            //  TODO Q: Move validation logic to service?
+            if (!await IsValidEventSubRequest(metadata, body))
             {
-                await _next(context);
+                await WriteResponseAsync(context, 403, "text/plain", "Invalid Signature");
                 return;
             }
 
-            await WriteResponseAsync(context, 403, "text/plain", "Invalid Signature");
+            switch (metadata.MessageType)
+            {
+                case "webhook_callback_verification":
+                    var json = await JsonDocument.ParseAsync(context.Request.Body);
+                    await WriteResponseAsync(context, 200, "text/plain", json.RootElement.GetProperty("challenge"u8).GetString()!);
+                    return;
+                case "notification":
+                    await _eventSubWebhooks.ProcessNotificationAsync(metadata, body);
+                    await WriteResponseAsync(context, 200, "text/plain", "Thanks for the heads up Jordan");
+                    return;
+                case "revocation":
+                    await _eventSubWebhooks.ProcessRevocationAsync(metadata, body);
+                    await WriteResponseAsync(context, 200, "text/plain", "Thanks for the heads up Jordan");
+                    return;
+                default:
+                    await WriteResponseAsync(context, 400, "text/plain", $"Unknown EventSub message type: {metadata.MessageType}");
+                    return;
+            }
         }
 
-        private async Task<bool> IsValidEventSubRequest(HttpRequest request)
+        private async Task<bool> IsValidEventSubRequest(WebhookEventSubMetadata metadata, ReadOnlyMemory<byte> body)
         {
             try
             {
-                if (!request.Headers.TryGetValue("Twitch-Eventsub-Message-Signature", out var providedSignatureHeader))
-                    return false;
-                
-                var providedSignature = providedSignatureHeader.First();
-                
-                if (!request.Headers.TryGetValue("Twitch-Eventsub-Message-Id", out var idHeader))
-                    return false;
-
-                var id = idHeader.First();
-
-                if (!request.Headers.TryGetValue("Twitch-Eventsub-Message-Timestamp", out var timestampHeader))
-                    return false;
-
-                var timestamp = timestampHeader.First();
-
-                var body = await ReadRequestBodyContentAsync(request);
-
-                return IsSignatureValid(providedSignature!, id!, timestamp!, body.Span, _options.SecretBytes!);
+                return IsSignatureValid(metadata.MessageSignature, metadata.MessageId, metadata.MessageTimestamp, body.Span, _options.SecretBytes!);
             }
             catch (Exception ex)
             {
@@ -104,25 +113,8 @@ namespace TwitchLib.EventSub.Webhooks.Middlewares
             return array.AsSpan(0, length);
         }
 
-        private static async Task PrepareRequestBodyAsync(HttpRequest request)
-        {
-            if (request is null)
-            {
-                throw new ArgumentNullException(nameof(request));
-            }
-
-            if (!request.Body.CanSeek)
-            {
-                request.EnableBuffering();
-                await request.Body.DrainAsync(CancellationToken.None);
-            }
-
-            request.Body.Seek(0L, SeekOrigin.Begin);
-        }
-
         private static async Task<ReadOnlyMemory<byte>> ReadRequestBodyContentAsync(HttpRequest request)
         {
-            await PrepareRequestBodyAsync(request);
             using var memoryStream = new MemoryStream();
             await request.Body.CopyToAsync(memoryStream);
             request.Body.Seek(0L, SeekOrigin.Begin);

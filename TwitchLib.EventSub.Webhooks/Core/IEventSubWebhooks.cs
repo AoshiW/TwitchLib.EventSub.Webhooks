@@ -9,6 +9,7 @@ using TwitchLib.EventSub.Webhooks.Core.EventArgs.Drop;
 using TwitchLib.EventSub.Webhooks.Core.EventArgs.Extension;
 using TwitchLib.EventSub.Webhooks.Core.EventArgs.Stream;
 using TwitchLib.EventSub.Webhooks.Core.EventArgs.User;
+using TwitchLib.EventSub.Webhooks.Core.Models;
 
 namespace TwitchLib.EventSub.Webhooks.Core
 {
@@ -226,19 +227,19 @@ namespace TwitchLib.EventSub.Webhooks.Core
         /// Event that triggers on "channel.chat.notification" notifications
         /// </summary>
         event EventHandler<ChannelChatNotificationArgs>? OnChannelChatNotification;
-        
+
 
         /// <summary>
         /// Processes "notification" type messages. You should not use this in your code, its for internal use only!
         /// </summary>
         /// <param name="headers">Dictionary of the request headers</param>
         /// <param name="body">Stream of the request body</param>
-        Task ProcessNotificationAsync(Dictionary<string, string> headers, Stream body);
+        Task ProcessNotificationAsync(WebhookEventSubMetadata headers, ReadOnlyMemory<byte> body);
         /// <summary>
         /// Processes "revocation" type messages. You should not use this in your code, its for internal use only!
         /// </summary>
         /// <param name="headers">Dictionary of the request headers</param>
         /// <param name="body">Stream of the request body</param>
-        Task ProcessRevocationAsync(Dictionary<string, string> headers, Stream body);
+        Task ProcessRevocationAsync(WebhookEventSubMetadata headers, ReadOnlyMemory<byte> body);
     }
 }
